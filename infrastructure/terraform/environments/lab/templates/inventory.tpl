@@ -3,15 +3,30 @@
 # Environment: ${environment}
 
 [k3s_cluster]
-localhost ansible_connection=local
+${vm_name} ansible_host=${vm_public_ip} ansible_user=${vm_user} ansible_ssh_private_key_file=~/.ssh/id_rsa
 
 [k3s_masters]
-localhost ansible_connection=local
+${vm_name} ansible_host=${vm_public_ip} ansible_user=${vm_user} ansible_ssh_private_key_file=~/.ssh/id_rsa
 
 [k3s_cluster:vars]
 k3s_version=${k3s_version}
 cluster_name=${cluster_name}
-environment=${environment}
+k3s_environment=${environment}
 pod_cidr=${pod_cidr}
 service_cidr=${service_cidr}
 ansible_python_interpreter=/usr/bin/python3
+
+# K3s installation settings
+k3s_server_manifests_dir=${k3s_server_manifests_dir}
+k3s_config_dir=${k3s_config_dir}
+
+# Network settings
+cluster_dns=${cluster_dns}
+
+# Security settings
+enable_secrets_encryption=${enable_secrets_encryption}
+enable_audit_logging=${enable_audit_logging}
+
+# Resource limits
+node_cpu_limit=${node_cpu_limit}
+node_memory_limit=${node_memory_limit}

@@ -77,10 +77,10 @@ variable "tags" {
 
 locals {
   k3s_config = {
-    cluster-cidr      = var.pod_cidr
-    service-cidr      = var.service_cidr
-    cluster-dns       = var.cluster_dns
-    disable           = join(",", var.disable_components)
+    cluster-cidr          = var.pod_cidr
+    service-cidr          = var.service_cidr
+    cluster-dns           = var.cluster_dns
+    disable               = join(",", var.disable_components)
     write-kubeconfig-mode = "0644"
   }
 }
@@ -91,15 +91,15 @@ locals {
 
 resource "local_file" "k3s_config" {
   filename = "${path.module}/generated/k3s-config.yaml"
-  content  = yamlencode({
-    cluster-cidr = local.k3s_config.cluster-cidr
-    service-cidr = local.k3s_config.service-cidr
-    cluster-dns  = local.k3s_config.cluster-dns
-    disable      = var.disable_components
+  content = yamlencode({
+    cluster-cidr          = local.k3s_config.cluster-cidr
+    service-cidr          = local.k3s_config.service-cidr
+    cluster-dns           = local.k3s_config.cluster-dns
+    disable               = var.disable_components
     write-kubeconfig-mode = local.k3s_config.write-kubeconfig-mode
 
     # Security settings
-    secrets-encryption = true
+    secrets-encryption      = true
     protect-kernel-defaults = true
 
     # Audit logging

@@ -33,7 +33,7 @@ kube-apiserver-arg:
   - "audit-log-maxsize=100"
 {% endif %}
   - "anonymous-auth=false"
-  - "enable-admission-plugins=NodeRestriction,PodSecurityPolicy"
+  - "enable-admission-plugins=NodeRestriction"
 
 # Controller Manager Arguments
 kube-controller-manager-arg:

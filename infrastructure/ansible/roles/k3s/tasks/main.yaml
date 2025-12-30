@@ -53,11 +53,17 @@
   retries: 5
   delay: 10
 
+- name: Check if kubectl exists
+  ansible.builtin.stat:
+    path: /usr/local/bin/kubectl
+  register: kubectl_file
+
 - name: Create kubectl symlink
   ansible.builtin.file:
     src: /usr/local/bin/k3s
     dest: /usr/local/bin/kubectl
     state: link
+  when: not kubectl_file.stat.exists
 
 - name: Setup kubectl completion
   ansible.builtin.shell: |
@@ -67,6 +73,8 @@
 
 - name: Verify K3s installation
   ansible.builtin.command: kubectl get nodes
+  environment:
+    KUBECONFIG: /etc/rancher/k3s/k3s.yaml
   register: k3s_nodes
   changed_when: false
   retries: 5

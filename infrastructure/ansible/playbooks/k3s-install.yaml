@@ -12,7 +12,6 @@
   gather_facts: true
 
   vars:
-    k3s_version: "{{ k3s_version | default('v1.30.0+k3s1') }}"
     k3s_install_dir: /usr/local/bin
     k3s_config_dir: /etc/rancher/k3s
     k3s_data_dir: /var/lib/rancher/k3s
@@ -22,7 +21,7 @@
       ansible.builtin.debug:
         msg:
           - "Cluster Name: {{ cluster_name }}"
-          - "Environment: {{ environment }}"
+          - "Environment: {{ k3s_environment }}"
           - "K3s Version: {{ k3s_version }}"
           - "Pod CIDR: {{ pod_cidr }}"
           - "Service CIDR: {{ service_cidr }}"
@@ -39,14 +38,14 @@
     - role: common
       tags: [common, prereqs]
 
-    - role: security
-      tags: [security, hardening]
+    # - role: security
+    #   tags: [security, hardening]
 
     - role: k3s
       tags: [k3s, install]
 
-    - role: monitoring
-      tags: [monitoring, observability]
+    # - role: monitoring
+    #   tags: [monitoring, observability]
 
   post_tasks:
     - name: Wait for K3s to be ready
