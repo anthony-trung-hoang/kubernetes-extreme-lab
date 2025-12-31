@@ -148,6 +148,14 @@ module "dns" {
       ttl     = 300
       records = [module.vm.public_ip_address]
     }
+    "argocd" = {
+      ttl     = 300
+      records = [module.vm.public_ip_address]
+    }
+    "grafana" = {
+      ttl     = 300
+      records = [module.vm.public_ip_address]
+    }
   }
 
   # CNAME Records (optional - for additional subdomains)

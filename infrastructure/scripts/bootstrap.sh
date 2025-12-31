@@ -12,6 +12,7 @@
 #   --ansible-only      Run only Ansible
 #   --skip-terraform    Skip Terraform step
 #   --skip-ansible      Skip Ansible step
+#   --skip-argocd       Skip ArgoCD installation
 ##############################################################################
 
 set -euo pipefail
@@ -29,9 +30,13 @@ PROJECT_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 TERRAFORM_DIR="${PROJECT_ROOT}/infrastructure/terraform/environments/lab"
 ANSIBLE_DIR="${PROJECT_ROOT}/infrastructure/ansible"
 
+# SSH Key for ArgoCD repository access
+ARGOCD_SSH_KEY="${ARGOCD_SSH_KEY:-$HOME/.ssh/id_ed25519_personal}"
+
 # Flags
 RUN_TERRAFORM=true
 RUN_ANSIBLE=true
+RUN_ARGOCD=true
 
 ##############################################################################
 # Functions
@@ -72,6 +77,10 @@ check_prerequisites() {
 
     if ! command -v helm &> /dev/null; then
         missing_tools+=("helm")
+    fi
+
+    if ! command -v yq &> /dev/null; then
+        missing_tools+=("yq")
     fi
 
     if [ ${#missing_tools[@]} -gt 0 ]; then
@@ -123,6 +132,12 @@ run_ansible() {
     log_info "Running K3s installation playbook..."
     ansible-playbook -i inventory/lab.ini playbooks/k3s-install.yaml
 
+    log_info "Running Caddy installation playbook..."
+    ansible-playbook -i inventory/lab.ini playbooks/caddy-install.yaml
+
+    log_info "Running Keycloak installation playbook..."
+    ansible-playbook -i inventory/lab.ini playbooks/keycloak-install.yaml
+
     log_success "Ansible playbooks completed successfully"
 }
 
@@ -130,7 +145,7 @@ verify_cluster() {
     log_info "Verifying K3s cluster..."
 
     # Export kubeconfig
-    export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+    export KUBECONFIG="${TERRAFORM_DIR}/kubeconfig.yaml"
 
     if ! kubectl cluster-info &> /dev/null; then
         log_error "Failed to connect to K3s cluster"
@@ -149,23 +164,107 @@ verify_cluster() {
     log_success "Cluster verification completed"
 }
 
+install_argocd() {
+    log_info "Installing ArgoCD..."
+
+    export KUBECONFIG="${TERRAFORM_DIR}/kubeconfig.yaml"
+
+    # Validate SSH key exists
+    if [ ! -f "$ARGOCD_SSH_KEY" ]; then
+        log_error "SSH key not found at: $ARGOCD_SSH_KEY"
+        log_info "Set ARGOCD_SSH_KEY environment variable or update the script"
+        log_info "Example: export ARGOCD_SSH_KEY=~/.ssh/id_ed25519"
+        return 1
+    fi
+    
+    log_info "Using SSH key: $ARGOCD_SSH_KEY"
+
+    # Create namespace
+    kubectl create namespace argocd --dry-run=client -o yaml | kubectl apply -f -
+
+    # Add GitHub SSH known hosts
+    log_info "Configuring SSH known hosts for GitHub..."
+    kubectl create secret generic argocd-ssh-known-hosts \
+        --from-literal=ssh_known_hosts="$(ssh-keyscan github.com 2>/dev/null)" \
+        -n argocd \
+        --dry-run=client -o yaml | kubectl apply -f -
+
+    # Update repository.yaml with SSH key using yq
+    log_info "Updating repository configuration with SSH key..."
+    local repo_yaml="${PROJECT_ROOT}/gitops/bootstrap/repository.yaml"
+    local temp_yaml="/tmp/repository-temp.yaml"
+    
+    # Read SSH key and update YAML
+    cp "$repo_yaml" "$temp_yaml"
+    yq eval ".stringData.sshPrivateKey = \"$(cat "$ARGOCD_SSH_KEY")\"" -i "$temp_yaml"
+    
+    # Apply the repository secret
+    kubectl apply -f "$temp_yaml"
+    rm -f "$temp_yaml"
+
+    # Navigate to ArgoCD chart and update dependencies
+    cd "${PROJECT_ROOT}/platform/core/argocd"
+    helm dependency update
+
+    # Install ArgoCD using custom chart
+    helm upgrade --install argocd . \
+        --namespace argocd \
+        --create-namespace \
+        --wait \
+        --timeout 10m
+
+    # Wait for ArgoCD server
+    kubectl wait --for=condition=available --timeout=300s \
+        deployment/argocd-server -n argocd
+
+    log_success "ArgoCD installed"
+    log_info "Password configured in values.yaml (default: admin)"
+}
+
+bootstrap_gitops() {
+    log_info "Bootstrapping GitOps..."
+
+    export KUBECONFIG="${TERRAFORM_DIR}/kubeconfig.yaml"
+
+    # Apply projects and root application
+    kubectl apply -f "${PROJECT_ROOT}/gitops/projects/"
+    sleep 2
+    kubectl apply -f "${PROJECT_ROOT}/gitops/bootstrap/root-application.yaml"
+
+    log_success "GitOps bootstrap completed"
+}
+
 display_summary() {
     echo ""
-    echo -e "${GREEN}================================${NC}"
-    echo -e "${GREEN}  Bootstrap Completed!${NC}"
-    echo -e "${GREEN}================================${NC}"
+    echo -e "${GREEN}╔════════════════════════════════════════════════════════╗${NC}"
+    echo -e "${GREEN}║           Bootstrap Completed Successfully!           ║${NC}"
+    echo -e "${GREEN}╚════════════════════════════════════════════════════════╝${NC}"
     echo ""
-    echo "Next steps:"
-    echo "1. Export kubeconfig:"
-    echo "   export KUBECONFIG=/etc/rancher/k3s/k3s.yaml"
+    
+    export KUBECONFIG="${TERRAFORM_DIR}/kubeconfig.yaml"
+    
+    # Get VM IP
+    VM_IP=$(cd "$TERRAFORM_DIR" && terraform output -raw vm_public_ip 2>/dev/null || echo "N/A")
+    
+    echo -e "${BLUE}Cluster Access:${NC}"
+    echo "  Kubeconfig: ${TERRAFORM_DIR}/kubeconfig.yaml"
+    echo "  Export:     export KUBECONFIG=${TERRAFORM_DIR}/kubeconfig.yaml"
     echo ""
-    echo "2. Verify cluster:"
-    echo "   kubectl get nodes"
-    echo "   kubectl get pods -A"
+    
+    echo -e "${BLUE}ArgoCD Access:${NC}"
+    echo "  URL:        https://argocd.lab.local (or http://${VM_IP}:30080)"
+    echo "  Username:   admin"
+    echo "  Password:   admin (configured in platform/core/argocd/values.yaml)"
     echo ""
-    echo "3. Deploy platform components:"
-    echo "   cd ${PROJECT_ROOT}/platform"
-    echo "   ./deploy-platform.sh"
+    
+    echo -e "${BLUE}Useful Commands:${NC}"
+    echo "  Check cluster:      kubectl get nodes"
+    echo "  Check applications: kubectl get applications -n argocd"
+    echo "  Watch sync:         kubectl get applications -n argocd -w"
+    echo "  Port forward:       kubectl port-forward svc/argocd-server -n argocd 8080:443"
+    echo ""
+    
+    echo -e "${GREEN}GitOps is active! ArgoCD will deploy all components automatically.${NC}"
     echo ""
 }
 
@@ -182,10 +281,12 @@ main() {
         case $1 in
             --terraform-only)
                 RUN_ANSIBLE=false
+                RUN_ARGOCD=false
                 shift
                 ;;
             --ansible-only)
                 RUN_TERRAFORM=false
+                RUN_ARGOCD=false
                 shift
                 ;;
             --skip-terraform)
@@ -194,6 +295,10 @@ main() {
                 ;;
             --skip-ansible)
                 RUN_ANSIBLE=false
+                shift
+                ;;
+            --skip-argocd)
+                RUN_ARGOCD=false
                 shift
                 ;;
             *)
@@ -222,6 +327,14 @@ main() {
 
     # Verify cluster
     verify_cluster || exit 1
+
+    # Install ArgoCD
+    if [ "$RUN_ARGOCD" = true ]; then
+        install_argocd || exit 1
+        bootstrap_gitops || exit 1
+    else
+        log_warning "Skipping ArgoCD installation"
+    fi
 
     # Display summary
     display_summary

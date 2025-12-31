@@ -1,3 +1,4 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/crds/application-crd.yaml
 ---
 apiVersion: argoproj.io/v1alpha1
 kind: Application
@@ -12,7 +13,7 @@ spec:
   project: platform
 
   source:
-    repoURL: https://github.com/yourusername/kubernetes-extreme-lab
+    repoURL: git@github.com:TrungHQ-02/kubernetes-extreme-lab.git
     targetRevision: main
     path: platform/networking/kong
     helm:

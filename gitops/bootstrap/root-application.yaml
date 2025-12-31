@@ -19,7 +19,7 @@ spec:
   project: default
 
   source:
-    repoURL: https://github.com/yourusername/kubernetes-extreme-lab
+    repoURL: git@github.com:TrungHQ-02/kubernetes-extreme-lab.git
     targetRevision: main
     path: gitops/bootstrap
     directory:
