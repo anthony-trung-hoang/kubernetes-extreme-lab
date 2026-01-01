@@ -147,8 +147,8 @@ kubelet-arg:
   - "eviction-soft=memory.available<1Gi,nodefs.available<15%"
   - "eviction-soft-grace-period=memory.available=1m30s,nodefs.available=2m"
 
-# Flannel Backend (default: vxlan)
-flannel-backend: vxlan
+# Flannel Backend
+flannel-backend: ${local.k3s_config.flannel-backend}
 EOF
 
   file_permission = "0644"
