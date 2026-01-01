@@ -1,10 +1,4 @@
 ---
-##############################################################################
-# Argo CD AppProject - Application Workloads
-#
-# Defines RBAC, allowed resources, and policies for application teams
-##############################################################################
-
 apiVersion: argoproj.io/v1alpha1
 kind: AppProject
 metadata:
@@ -65,6 +59,8 @@ spec:
     - group: 'networking.k8s.io'
       kind: NetworkPolicy
     - group: 'argoproj.io'
+      kind: Application
+    - group: 'argoproj.io'
       kind: Rollout
     - group: 'argoproj.io'
       kind: AnalysisTemplate
@@ -86,21 +82,8 @@ spec:
     - group: 'rbac.authorization.k8s.io'
       kind: RoleBinding
 
-  # Sync windows (prevent production changes during business hours)
-  syncWindows:
-    - kind: deny
-      schedule: '0 8-18 * * 1-5'  # Mon-Fri, 8am-6pm
-      duration: 10h
-      applications:
-        - '*-prod'
-      manualSync: true
-    - kind: allow
-      schedule: '* * * * *'
-      duration: 24h
-      applications:
-        - '*'
-      manualSync: true
-
-  # Orphaned resources
+  # Orphaned resources monitoring
   orphanedResources:
     warn: true
+        - '*'
+      manualSync: true

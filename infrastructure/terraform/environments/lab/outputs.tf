@@ -149,6 +149,14 @@ kubelet-arg:
 
 # Flannel Backend
 flannel-backend: ${local.k3s_config.flannel-backend}
+
+# Disable components (using our own)
+disable-cloud-controller: true
+disable-network-policy: false
+
+# TLS SANs - Add public IP for external access
+tls-san:
+  - "${module.vm.public_ip_address}"
 EOF
 
   file_permission = "0644"
